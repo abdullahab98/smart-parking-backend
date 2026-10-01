@@ -1,0 +1,104 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import authRoutes from './routes/authRoutes.js';
+import vehicleRoutes from './routes/vehicleRoutes.js';
+import parkingRoutes from './routes/parkingRoutes.js';
+import bookingRoutes from './routes/bookingRoutes.js';
+import paymentRoutes from './routes/paymentRoutes.js';
+import publicRoutes from './routes/publicRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
+import contactRoutes from './routes/contactRoutes.js';
+import managerRoutes from './routes/managerRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import { requireAuth } from './middleware/authMiddleware.js';
+import { globalLimiter } from './middleware/rateLimiters.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendPath = path.resolve(__dirname, '../../frontend');
+
+const app = express();
+
+// Security Headers (relaxed CSP for local dev & Google Fonts)
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false
+  })
+);
+
+// Cross-Origin Resource Sharing
+app.use(
+  cors({
+    origin: (origin, callback) => callback(null, true),
+    credentials: true
+  })
+);
+
+// Body Parsers
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Root Welcome Endpoint
+app.get('/', (req, res) => {
+  res.json({
+    name: 'Smart Parking Management System API',
+    status: 'online',
+    version: '1.0.0',
+    health: '/health',
+    publicLocations: '/api/public/locations'
+  });
+});
+
+// Health Check Endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// API Routes
+app.use('/api/public', publicRoutes);
+app.use('/api/contact', contactRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/vehicles', requireAuth, vehicleRoutes);
+app.use('/api/parking', parkingRoutes);
+app.use('/api/bookings', bookingRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/manager', managerRoutes);
+app.use('/api/admin', adminRoutes);
+
+// Fallback to frontend index for non-API GET requests
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  res.sendFile(path.join(frontendPath, 'index.html'));
+});
+
+// 404 Not Found Handler for unmatched API routes
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Resource not found: ${req.method} ${req.originalUrl}`
+  });
+});
+
+// Central Error Handling Middleware
+app.use((err, req, res, next) => {
+  console.error('[Unhandled Error]', err);
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({
+    success: false,
+    message: err.message || 'Internal Server Error'
+  });
+});
+
+export default app;
